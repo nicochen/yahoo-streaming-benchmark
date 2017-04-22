@@ -11,7 +11,10 @@ import flink.benchmark.utils.ThroughputLogger;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
 import org.apache.flink.api.common.functions.*;
-import org.apache.flink.api.common.state.OperatorState;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -181,8 +184,13 @@ public class AdvertisingTopologyFlinkWindows {
     @Override
     public TriggerResult onElement(Object element, long timestamp, TimeWindow window, TriggerContext ctx) throws Exception {
       ctx.registerEventTimeTimer(window.maxTimestamp());
+
+      ValueStateDescriptor<Boolean> firstTime = new ValueStateDescriptor<>("firstTime", TypeInformation.of(new TypeHint<Boolean>() {
+      }));
+      ValueState<Boolean> firstTimerSet = ctx.getPartitionedState(firstTime);
+
       // register system timer only for the first time
-      OperatorState<Boolean> firstTimerSet = ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
+      // OperatorState<Boolean> firstTimerSet = ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
       if (!firstTimerSet.value()) {
         ctx.registerProcessingTimeTimer(System.currentTimeMillis() + 1000L);
         firstTimerSet.update(true);
@@ -193,6 +201,11 @@ public class AdvertisingTopologyFlinkWindows {
     @Override
     public TriggerResult onEventTime(long time, TimeWindow window, TriggerContext ctx) {
       return TriggerResult.FIRE_AND_PURGE;
+    }
+
+    @Override
+    public void clear(TimeWindow timeWindow, TriggerContext triggerContext) throws Exception {
+
     }
 
     @Override
