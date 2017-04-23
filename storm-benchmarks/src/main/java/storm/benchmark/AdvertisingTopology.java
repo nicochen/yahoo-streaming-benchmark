@@ -29,6 +29,7 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
 import org.apache.log4j.Logger;
 import org.json.JSONObject;
+import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 import org.apache.storm.kafka.KafkaSpout;
 import org.apache.storm.kafka.SpoutConfig;
@@ -39,6 +40,62 @@ import org.apache.storm.kafka.ZkHosts;
  * This is a basic example of a Storm topology.
  */
 public class AdvertisingTopology {
+
+    public static class ThroughoutBolt extends BaseRichBolt {
+        OutputCollector _collector;
+
+        private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(ThroughoutBolt.class);
+
+        private long totalReceived = 0;
+        private long lastTotalReceived = 0;
+        private long lastLogTimeMs = -1;
+        private int elementSize;
+        private long logfreq;
+
+        public ThroughoutBolt(int elementSize, long logfreq) {
+            this.elementSize = elementSize;
+            this.logfreq = logfreq;
+        }
+
+        @Override
+        public void prepare(Map map, TopologyContext context, OutputCollector collector) {
+            _collector = collector;
+        }
+
+        @Override
+        public void execute(Tuple tuple) {
+            totalReceived++;
+            if (totalReceived % logfreq == 0) {
+                // throughput over entire time
+                long now = System.currentTimeMillis();
+
+                // throughput for the last "logfreq" elements
+                if(lastLogTimeMs == -1) {
+                    // init (the first)
+                    lastLogTimeMs = now;
+                    lastTotalReceived = totalReceived;
+                } else {
+                    long timeDiff = now - lastLogTimeMs;
+                    long elementDiff = totalReceived - lastTotalReceived;
+                    double ex = (1000/(double)timeDiff);
+                    LOG.info("During the last {} ms, we received {} elements. That's {} elements/second/core. {} MB/sec/core. GB received {}",
+                            timeDiff, elementDiff, elementDiff*ex, elementDiff*ex*elementSize / 1024 / 1024, (totalReceived * elementSize) / 1024 / 1024 / 1024);
+                    // reinit
+                    lastLogTimeMs = now;
+                    lastTotalReceived = totalReceived;
+                }
+            }
+
+            _collector.emit(tuple, tuple.getValues());
+            _collector.ack(tuple);
+        }
+
+        @Override
+        public void declareOutputFields(OutputFieldsDeclarer outputFieldsDeclarer) {
+
+        }
+    }
+
 
     public static class DeserializeBolt extends BaseRichBolt {
         OutputCollector _collector;
@@ -228,7 +285,8 @@ public class AdvertisingTopology {
         KafkaSpout kafkaSpout = new KafkaSpout(spoutConfig);
 
         builder.setSpout("ads", kafkaSpout, kafkaPartitions);
-        builder.setBolt("event_deserializer", new DeserializeBolt(), parallel).shuffleGrouping("ads");
+        builder.setBolt("Throughout_logger", new ThroughoutBolt(240, 1_000_000), parallel).shuffleGrouping("ads");
+        builder.setBolt("event_deserializer", new DeserializeBolt(), parallel).shuffleGrouping("Throughout_logger");
         builder.setBolt("event_filter", new EventFilterBolt(), parallel).shuffleGrouping("event_deserializer");
         builder.setBolt("event_projection", new EventProjectionBolt(), parallel).shuffleGrouping("event_filter");
         builder.setBolt("redis_join", new RedisJoinBolt(redisServerHost), parallel).shuffleGrouping("event_projection");
