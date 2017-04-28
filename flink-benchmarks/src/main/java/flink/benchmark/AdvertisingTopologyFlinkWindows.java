@@ -32,17 +32,14 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.triggers.TriggerResult;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer082;
+import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer08;
 import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -63,18 +60,27 @@ public class AdvertisingTopologyFlinkWindows {
 
     DataStream<String> rawMessageStream = streamSource(config, env);
 
+    int parallel = config.getParameters().getInt("flink.parallel");
+
     // log performance
-    rawMessageStream.flatMap(new ThroughputLogger<String>(240, 1_000_000));
+    rawMessageStream.
+            flatMap(new ThroughputLogger<String>(240, 1_000_000))
+            .setParallelism(1)
+            /*.slotSharingGroup("throughout")*/;
 
     DataStream<Tuple2<String, String>> joinedAdImpressions = rawMessageStream
-      .flatMap(new DeserializeBolt())
-      .filter(new EventFilterBolt())
-      .<Tuple2<String, String>>project(2, 5) //ad_id, event_time
-      .flatMap(new RedisJoinBolt(config)) // campaign_id, event_time
+      .flatMap(new DeserializeBolt()).setParallelism(parallel)
+           /* .slotSharingGroup("map")*/
+      .filter(new EventFilterBolt()).setParallelism(parallel)
+      .<Tuple2<String, String>>project(2, 5).setParallelism(parallel) //ad_id, event_time
+      .flatMap(new RedisJoinBolt(config)).setParallelism(parallel) // campaign_id, event_time
       .assignTimestamps(new AdTimestampExtractor()); // extract timestamps and generate watermarks from event_time
 
     WindowedStream<Tuple3<String, String, Long>, Tuple, TimeWindow> windowStream = joinedAdImpressions
       .map(new MapToImpressionCount())
+            .setParallelism(parallel)
+
+            //hash shuffle
       .keyBy(0) // campaign_id
       .timeWindow(Time.of(config.windowSize, TimeUnit.MILLISECONDS));
 
@@ -83,13 +89,14 @@ public class AdvertisingTopologyFlinkWindows {
 
     // campaign_id, window end time, count
     DataStream<Tuple3<String, String, Long>> result =
-      windowStream.apply(sumReduceFunction(), sumWindowFunction());
+      windowStream.apply(sumReduceFunction(), sumWindowFunction()).setParallelism(parallel)
+             /* .slotSharingGroup("reduce")*/;
 
     // write result to redis
     if (config.getParameters().has("add.result.sink.optimized")) {
-      result.addSink(new RedisResultSinkOptimized(config));
+      result.addSink(new RedisResultSinkOptimized(config)).setParallelism(parallel);
     } else {
-      result.addSink(new RedisResultSink(config));
+      result.addSink(new RedisResultSink(config)).setParallelism(parallel);
     }
 
     env.execute("AdvertisingTopologyFlinkWindows " + config.parameters.toMap().toString());
@@ -111,12 +118,16 @@ public class AdvertisingTopologyFlinkWindows {
       RedisHelper redisHelper = new RedisHelper(config);
       redisHelper.prepareRedis(campaigns);
       redisHelper.writeCampaignFile(campaigns);
+      return env.addSource(source, sourceName);
     } else {
       source = kafkaSource(config);
       sourceName = "Kafka";
+      int kafkaPartitions = config.getParameters().getInt("kafka.partitions");
+      return env.addSource(source, sourceName)
+              .setParallelism(kafkaPartitions)
+              /*.slotSharingGroup("source")*/;
     }
 
-    return env.addSource(source, sourceName);
   }
 
   /**
@@ -169,8 +180,8 @@ public class AdvertisingTopologyFlinkWindows {
   /**
    * Configure Kafka source
    */
-  private static FlinkKafkaConsumer082<String> kafkaSource(BenchmarkConfig config) {
-    return new FlinkKafkaConsumer082<>(
+  private static FlinkKafkaConsumer08<String> kafkaSource(BenchmarkConfig config) {
+    return new FlinkKafkaConsumer08<>(
       config.kafkaTopic,
       new SimpleStringSchema(),
       config.getParameters().getProperties());
@@ -181,17 +192,25 @@ public class AdvertisingTopologyFlinkWindows {
    */
   private static class EventAndProcessingTimeTrigger extends Trigger<Object, TimeWindow> {
 
+ //   private static final Logger LOG = LoggerFactory.getLogger(EventAndProcessingTimeTrigger.class);
+    Date now=new Date();
     @Override
     public TriggerResult onElement(Object element, long timestamp, TimeWindow window, TriggerContext ctx) throws Exception {
       ctx.registerEventTimeTimer(window.maxTimestamp());
 
-      ValueStateDescriptor<Boolean> firstTime = new ValueStateDescriptor<>("firstTime", TypeInformation.of(new TypeHint<Boolean>() {
-      }));
+      // TODO does not work
+      ValueStateDescriptor<Boolean> firstTime =
+              new ValueStateDescriptor<>("firstTime",
+                      TypeInformation.of(new TypeHint<Boolean>() {}),
+                      false);
       ValueState<Boolean> firstTimerSet = ctx.getPartitionedState(firstTime);
 
+//      ValueState<Boolean> firstTimerSet1 =
+//              ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
+
       // register system timer only for the first time
-      // OperatorState<Boolean> firstTimerSet = ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
       if (!firstTimerSet.value()) {
+      //  System.out.println(System.currentTimeMillis()+ ": register system timer only for the first time");
         ctx.registerProcessingTimeTimer(System.currentTimeMillis() + 1000L);
         firstTimerSet.update(true);
       }

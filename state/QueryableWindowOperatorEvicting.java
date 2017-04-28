@@ -14,7 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *//*
+
 
 package flink.benchmark.state;
 
@@ -53,7 +54,9 @@ import java.util.concurrent.TimeUnit;
 public class QueryableWindowOperatorEvicting
 		extends AbstractStreamOperator<Tuple3<String, Long, Long>>
 		implements OneInputStreamOperator<UUID, Tuple3<String, Long, Long>>,
-		QueryableKeyValueState<String, String> /* key: campaign_id (String), value: long (window count) */{
+		QueryableKeyValueState<String, String> */
+/* key: campaign_id (String), value: long (window count) *//*
+{
 
 	private static final Logger LOG = LoggerFactory.getLogger(QueryableWindowOperatorEvicting.class);
 
@@ -260,12 +263,14 @@ public class QueryableWindowOperatorEvicting
 		}
 	}
 
-	/**
+	*/
+/**
 	 * Note: This method has nothing to do with a regular getValue() implementation.
 	 * Its more designed as a remote debugger
 	 *
 	 * @throws WrongKeyPartitionException
-	 */
+	 *//*
+
 	@Override
 	public String getValue(Long timestamp, String key) throws WrongKeyPartitionException {
 		LOG.info("Query for timestamp {} and key {}", timestamp, key);
@@ -419,3 +424,4 @@ public class QueryableWindowOperatorEvicting
 		}
 	}
 }
+*/

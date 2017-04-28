@@ -124,7 +124,7 @@ public class BenchmarkConfig implements Serializable{
     ymlMap.put("bootstrap.servers", getKafkaBrokers(ymlMap));
     ymlMap.put("akka.zookeeper.quorum", akkaZookeeperQuorum);
     ymlMap.put("auto.offset.reset", "latest");
-    ymlMap.put("group.id", UUID.randomUUID().toString());
+    ymlMap.put("group.id", "huatuo");
 
     // Convert everything to strings
     for (Map.Entry e : ymlMap.entrySet()) {

@@ -91,11 +91,10 @@ public class AdvertisingTopology {
         }
 
         @Override
-        public void declareOutputFields(OutputFieldsDeclarer outputFieldsDeclarer) {
-
+        public void declareOutputFields(OutputFieldsDeclarer declarer) {
+            declarer.declare(new Fields("raw"));
         }
     }
-
 
     public static class DeserializeBolt extends BaseRichBolt {
         OutputCollector _collector;
@@ -272,9 +271,16 @@ public class AdvertisingTopology {
         int workers = ((Number)commonConfig.get("storm.workers")).intValue();
         int ackers = ((Number)commonConfig.get("storm.ackers")).intValue();
         int cores = ((Number)commonConfig.get("process.cores")).intValue();
-        int parallel = Math.max(1, cores/7);
+        //int parallel = Math.max(1, cores/7);
+        int parallel = 2;
 
-        ZkHosts hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");
+        ZkHosts hosts;
+     /*   if(zkPath.equals("/"))
+            hosts = new ZkHosts(zkServerHosts, zkPath + "brokers");
+        else
+            hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");*/
+
+        hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");
 
         SpoutConfig spoutConfig = new SpoutConfig(hosts, kafkaTopic, zkPath, UUID.randomUUID().toString());
         spoutConfig.stateUpdateIntervalMs = 10_000;
@@ -285,12 +291,13 @@ public class AdvertisingTopology {
         KafkaSpout kafkaSpout = new KafkaSpout(spoutConfig);
 
         builder.setSpout("ads", kafkaSpout, kafkaPartitions);
-        builder.setBolt("Throughout_logger", new ThroughoutBolt(240, 1_000_000), parallel).shuffleGrouping("ads");
-        builder.setBolt("event_deserializer", new DeserializeBolt(), parallel).shuffleGrouping("Throughout_logger");
+        builder.setBolt("throughout_logger", new ThroughoutBolt(240, 1_000_000), 1).shuffleGrouping("ads");
+
+        builder.setBolt("event_deserializer", new DeserializeBolt(), parallel).shuffleGrouping("ads");
         builder.setBolt("event_filter", new EventFilterBolt(), parallel).shuffleGrouping("event_deserializer");
         builder.setBolt("event_projection", new EventProjectionBolt(), parallel).shuffleGrouping("event_filter");
         builder.setBolt("redis_join", new RedisJoinBolt(redisServerHost), parallel).shuffleGrouping("event_projection");
-        builder.setBolt("campaign_processor", new CampaignProcessor(redisServerHost), parallel*2)
+        builder.setBolt("campaign_processor", new CampaignProcessor(redisServerHost), parallel)
             .fieldsGrouping("redis_join", new Fields("campaign_id"));
 
         Config conf = new Config();
@@ -304,7 +311,7 @@ public class AdvertisingTopology {
 
             LocalCluster cluster = new LocalCluster();
             cluster.submitTopology("test", conf, builder.createTopology());
-            org.apache.storm.utils.Utils.sleep(10000);
+            org.apache.storm.utils.Utils.sleep(60000);
             cluster.killTopology("test");
             cluster.shutdown();
         }

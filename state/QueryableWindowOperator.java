@@ -14,7 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *//*
+
 package flink.benchmark.state;
 
 import akka.actor.ActorRef;
@@ -48,14 +49,18 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
+*/
 /**
  * Custom operator that computes windows and also makes that state directly queryable from
  * outside the streaming system via Akka.
- */
+ *//*
+
 public class QueryableWindowOperator
   extends AbstractStreamOperator<Tuple3<String, Long, Long>>
   implements OneInputStreamOperator<Tuple2<String, Long>, Tuple3<String, Long, Long>>,
-  QueryableKeyValueState<String, String> /* key: campaign_id (String), value: long (window count) */ {
+  QueryableKeyValueState<String, String> */
+/* key: campaign_id (String), value: long (window count) *//*
+ {
 
   private static final Logger LOG = LoggerFactory.getLogger(QueryableWindowOperator.class);
 
@@ -164,7 +169,8 @@ public class QueryableWindowOperator
   public void processWatermark(Watermark watermark) throws Exception {
     // we'll keep state forever in the operator
 
-	/*	StreamRecord<Tuple3<String, Long, Long>> result = new StreamRecord<>(null, -1);
+	*/
+/*	StreamRecord<Tuple3<String, Long, Long>> result = new StreamRecord<>(null, -1);
 
 		Iterator<Map.Entry<String, Map<Long, CountAndAccessTime>>> iterator = windows.entrySet().iterator();
 		while (iterator.hasNext()) {
@@ -177,7 +183,8 @@ public class QueryableWindowOperator
 				}
 			}
 		}
-		lastWatermark = watermark.getTimestamp(); **/
+		lastWatermark = watermark.getTimestamp(); **//*
+
   }
 
 
@@ -238,12 +245,14 @@ public class QueryableWindowOperator
     }
   }
 
-  /**
+  */
+/**
    * Note: This method has nothing to do with a regular getValue() implementation.
    * Its more designed as a remote debugger
    *
    * @throws WrongKeyPartitionException
-   */
+   *//*
+
   @Override
   public String getValue(Long timestamp, String key) throws WrongKeyPartitionException {
     LOG.info("Query for timestamp {} and key {}", timestamp, key);
@@ -380,3 +389,4 @@ public class QueryableWindowOperator
     }
   }
 }
+*/
