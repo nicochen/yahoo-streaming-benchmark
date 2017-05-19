@@ -271,16 +271,9 @@ public class AdvertisingTopology {
         int workers = ((Number)commonConfig.get("storm.workers")).intValue();
         int ackers = ((Number)commonConfig.get("storm.ackers")).intValue();
         int cores = ((Number)commonConfig.get("process.cores")).intValue();
-        //int parallel = Math.max(1, cores/7);
-        int parallel = 2;
+        int parallel = Math.max(1, cores/7);
 
-        ZkHosts hosts;
-     /*   if(zkPath.equals("/"))
-            hosts = new ZkHosts(zkServerHosts, zkPath + "brokers");
-        else
-            hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");*/
-
-        hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");
+        ZkHosts hosts = new ZkHosts(zkServerHosts, zkPath + "/brokers");
 
         SpoutConfig spoutConfig = new SpoutConfig(hosts, kafkaTopic, zkPath, UUID.randomUUID().toString());
         spoutConfig.stateUpdateIntervalMs = 10_000;
