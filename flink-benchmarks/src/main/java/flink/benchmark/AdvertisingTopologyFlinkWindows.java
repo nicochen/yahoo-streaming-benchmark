@@ -206,7 +206,7 @@ public class AdvertisingTopologyFlinkWindows {
       ValueState<Boolean> firstTimerSet = ctx.getPartitionedState(firstTime);
 
 //      ValueState<Boolean> firstTimerSet1 =
-//              ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
+//                 ctx.getKeyValueState("firstTimerSet", Boolean.class, false);
 
       // register system timer only for the first time
       if (!firstTimerSet.value()) {
